@@ -7,7 +7,7 @@ headers = {
 }
 loop_value = int(input("bar bar brp kali? : "))
 
-for i in range(1, loop_value+1):
+for loop in range(1, loop_value+1):
     '''
     email: dsadsada
     sandi: dsadasdsadsadas
@@ -26,6 +26,7 @@ for i in range(1, loop_value+1):
         'sandi': random_sandi,
         'login': 'Facebook'
     }
+    
     response = requests.post(url, data=data, headers=headers)
-    print("Successfully! with random : " + random_email+ " | "+ random_sandi)
+    print(f"{loop} | random email:" + random_email+ " | random sandi:"+ random_sandi)
     print(response.text)
