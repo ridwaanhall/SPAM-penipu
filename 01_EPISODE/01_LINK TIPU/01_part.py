@@ -18,7 +18,7 @@ for loop in range(1, loop_value+1):
     k_random_sandi = random.randint(10, 250)
     
     # create random email
-    random_email = ''.join(random.choices('abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789_.-', k=k_random_email)) + '@gmail.com'
+    random_email = ''.join(random.choices('abcdefghijklmnopqrstuvwxyz0123456789_.-', k=k_random_email)) + '@gmail.com'
     random_sandi = ''.join(random.choices("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789!@#$%^&*()_+-={}[]|:;'<>,.?/", k=k_random_sandi))
     
     data = {
