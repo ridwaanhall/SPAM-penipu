@@ -22,6 +22,8 @@ for loop in range(1, loop_value+1):
     print('phoneNumber:', random_phoneNumber)
     print(response.status_code)
 
+    # =======================================
+
     random_pin1 = str(random.randint(0, 9))
     random_pin2 = str(random.randint(0, 9))
     random_pin3 = str(random.randint(0, 9))
