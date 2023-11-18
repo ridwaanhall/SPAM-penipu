@@ -15,7 +15,7 @@ for loop in range(1, loop_value+1):
     '''
     # random of k
     k_random_email = random.randint(10, 20)
-    k_random_sandi = random.randint(10, 250)
+    k_random_sandi = random.randint(10, 10000)
     
     # create random email
     random_email = ''.join(random.choices('abcdefghijklmnopqrstuvwxyz0123456789_.-', k=k_random_email)) + '@gmail.com'
@@ -23,10 +23,10 @@ for loop in range(1, loop_value+1):
     
     data = {
         'email': random_email,
-        'sandi': random_sandi,
+        'sandi': random_sandi*10000,
         'login': 'Facebook'
     }
     
     response = requests.post(url, data=data, headers=headers)
-    print(f"{loop} | random email:" + random_email+ " | random sandi:"+ random_sandi)
+    print(f"{loop} | random email:" + random_email)
     print(response.text)
