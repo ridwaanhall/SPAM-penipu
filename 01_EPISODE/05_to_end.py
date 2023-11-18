@@ -2,7 +2,7 @@ import requests
 import random
 '''
 005 FROM https://mediafire-new.my.id/mf/?p=987fe373 REDIRECT TO https://oeib.terbaiik.com/
-006 
+006 https://djngk.terbaiik.com/data.php
 '''
 url = 'https://oeib.terbaiik.com/gcodeCheck.php'
 headers = {
