@@ -9,8 +9,8 @@ loop_value = int(input("bar bar brp kali? : "))
 
 for loop in range(1, loop_value+1):
     '''
-    email: dsadsada
-    sandi: dsadasdsadsadas
+    email: dasdasd
+    sandi: dsadasdasdasd
     login: Facebook
     '''
     # random of k
