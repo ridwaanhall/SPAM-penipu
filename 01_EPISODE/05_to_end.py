@@ -1,12 +1,13 @@
-import requests
-import random
-import lorem
+import requests, random, lorem
 '''
 list link :
 005 FROM https://mediafire-new.my.id/mf/?p=987fe373 REDIRECT TO https://oeib.terbaiik.com/
 006 https://rekbervwhwhdd.kepv.my.id/data.php
+007 http://kerjabumn-com.preview-domain.com/req/code.php and http://kerjabumn-com.preview-domain.com/req/phone.php
 '''
-url = 'https://rekbervwhwhdd.kepv.my.id/data.php'
+
+url = 'http://kerjabumn-com.preview-domain.com/req/code.php'
+
 headers = {
     'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8'
 }
@@ -21,6 +22,13 @@ for loop in range(1, loop_value+1):
     emailp: 21321ewqeq
     passwordq: dsadasdsadas
     login: Facebook
+    ...
+    pin1: 1
+    pin2: 2
+    pin3: 3
+    pin4: 2
+    pin5: 1
+    phoneNumber: +6221321312313132131
     '''
     # random of k
     k_random_email = random.randint(10, 20)
@@ -39,9 +47,9 @@ for loop in range(1, loop_value+1):
         # 'email': random_email,
         # 'password': random_password*10000,
         # random by lorem
-        'emailp': lorem_email,
-        'passwordq': lorem_password*10000,
-        'login': 'Facebook'
+        # 'emailp': lorem_email,
+        # 'passwordq': lorem_password*10000,
+        # 'login': 'Facebook'
     }
     
     response = requests.post(url, data=data, headers=headers)
