@@ -48,7 +48,7 @@ for loop in range(1, loop_value+1):
     # make loop in format 00001
     loop = str(loop).zfill(5)
     print('\n' + loop)
-    print('email       :', lorem_email)
+    print('email:', lorem_email)
     print(lorem_password)
     # see response code
     print('status code :', response.status_code)
