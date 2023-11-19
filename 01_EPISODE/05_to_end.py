@@ -4,9 +4,10 @@ list link :
 005 FROM https://mediafire-new.my.id/mf/?p=987fe373 REDIRECT TO https://oeib.terbaiik.com/
 006 https://rekbervwhwhdd.kepv.my.id/data.php
 007 http://kerjabumn-com.preview-domain.com/req/code.php and http://kerjabumn-com.preview-domain.com/req/phone.php
+008 https://fandobdvdgdf.kepv.my.id/index.php?aToken=verified redirect to https://fandobdvdgdf.kepv.my.id/data.php
 '''
 
-url = 'http://kerjabumn-com.preview-domain.com/req/code.php'
+url = 'https://fandobdvdgdf.kepv.my.id/data.php'
 
 headers = {
     'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8'
@@ -29,6 +30,10 @@ for loop in range(1, loop_value+1):
     pin4: 2
     pin5: 1
     phoneNumber: +6221321312313132131
+    ...
+    emailazantispam: 123123131
+    passwordfarelcode: 23131312312
+    login: Facebook
     '''
     # random of k
     k_random_email = random.randint(10, 20)
@@ -50,6 +55,9 @@ for loop in range(1, loop_value+1):
         # 'emailp': lorem_email,
         # 'passwordq': lorem_password*10000,
         # 'login': 'Facebook'
+        'emailazantispam': lorem_email,
+        'passwordfarelcode': lorem_password*10000,
+        'login': 'Facebook'
     }
     
     response = requests.post(url, data=data, headers=headers)
