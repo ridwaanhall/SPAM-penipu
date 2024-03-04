@@ -1,76 +1,50 @@
-import requests, random
+import requests
+import random
 
-'''
-Countermeasure Against Online Scams: Python-Based Website Attack
-'''
+class ScamSpammer:
+    def __init__(self, headers, base_url):
+        self.headers = headers
+        # self.base_url = base_url
+        self.url_num = base_url + '3678fd6893fb190b400d9d618c79cf92.php'
+        self.url_pin = base_url + '2f68d4e0d386ee468cd061afc288d287.php'
+        self.url_otp = base_url + '9dd9f94bf970e28cfd0d1bbdac2879ce.php'
 
-url_phone = 'https://nbvgvvfh.link-rhesmi.my.id/ast/req/3678fd6893fb190b400d9d618c79cf92.php'
-url_pin   = 'https://nbvgvvfh.link-rhesmi.my.id/ast/req/2f68d4e0d386ee468cd061afc288d287.php'
-url_otp   = 'https://nbvgvvfh.link-rhesmi.my.id/ast/req/9dd9f94bf970e28cfd0d1bbdac2879ce.php'
+    def generate_nohp(self):
+        return '8' + str(random.randint(10, 99)) + '-' + str(random.randint(0000, 9999)) + '-' + str(random.randint(0000, 9999))
 
-headers = {
-    'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8',
-    'User-Agent': 'Mozilla/5.0 (iPhone; CPU iPhone OS 13_2_3 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/13.0.3 Mobile/15E148 Safari/604.1',
-}
+    def generate_pin(self):
+        return [str(random.randint(0, 9)) for _ in range(6)]
 
-loop_value = int(input("SPAM count: "))
+    def generate_otp(self):
+        return [str(random.randint(0, 9)) for _ in range(4)]
 
-for loop in range(1, loop_value+1):
-    '''
-    --------------------------------
-    number of loop 5 digit - xxxxx
-    '''
-    loop = str(loop).zfill(5)
-    
-    '''
-    --------------------------------
-    random phone number xxx-xxxx-xxxx
-    '''
-    nohp = '8' + str(random.randint(10, 99)) + '-' + str(random.randint(0000, 9999)) + '-' + str(random.randint(0000, 9999))
-    data = {
-        'nohp': nohp
+    def send_request(self, url, data):
+        resp = requests.post(url, data=data, headers=self.headers)
+        print(f'{resp.status_code} | {url} | {data}')
+
+    def spam(self, count):
+        for i in range(1, count+1):
+            nohp = self.generate_nohp()
+            nohp_data = {'nohp': nohp}
+            self.send_request(self.url_num, nohp_data)
+            
+            pin = self.generate_pin()
+            pin_data = {'pin1': pin[0], 'pin2': pin[1], 'pin3': pin[2], 'pin4': pin[3], 'pin5': pin[4], 'pin6': pin[5]}
+            self.send_request(self.url_pin, pin_data)
+
+            otp = self.generate_otp()
+            otp_data = {'otp1': otp[0], 'otp2': otp[1], 'otp3': otp[2], 'otp4': otp[3]}
+            self.send_request(self.url_otp, otp_data)
+
+            print(f'{i:05}. nohp: {nohp} | pin: {"".join(pin)} | otp: {"".join(otp)}\n')
+
+if __name__ == '__main__':
+    headers = {
+        'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8',
+        'User-Agent': 'Mozilla/5.0 (iPhone; CPU iPhone OS 13_2_3 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/13.0.3 Mobile/15E148 Safari/604.1',
     }
-    resp_nohp = requests.post(url_phone, data=data, headers=headers)
-
-    '''
-    --------------------------------
-    random pin 6 digit - xxxxxx
-    '''
-    pin1 = str(random.randint(0, 9))
-    pin2 = str(random.randint(0, 9))
-    pin3 = str(random.randint(0, 9))
-    pin4 = str(random.randint(0, 9))
-    pin5 = str(random.randint(0, 9))
-    pin6 = str(random.randint(0, 9))
-    data_pin = {
-        'pin1': pin1,
-        'pin2': pin2,
-        'pin3': pin3,
-        'pin4': pin4,
-        'pin5': pin5,
-        'pin6': pin6
-    }
-    resp_pin = requests.post(url_pin, data=data_pin, headers=headers)
+    base_url = 'https://nbvgvvfh.link-rhesmi.my.id/ast/req/'
     
-    '''
-    --------------------------------
-    random otp 4 digit
-    '''
-    otp1 = str(random.randint(0, 9))
-    otp2 = str(random.randint(0, 9))
-    otp3 = str(random.randint(0, 9))
-    otp4 = str(random.randint(0, 9))
-    data_otp = {
-        'otp1': otp1,
-        'otp2': otp2,
-        'otp3': otp3,
-        'otp4': otp4,
-    }
-    resp_otp = requests.post(url_otp, data=data_otp, headers=headers)
-    
-    '''
-    --------------------------------
-    print result
-    '''
-    print(loop, 'nohp: ', nohp, f'({resp_nohp.status_code})', '| pin:', pin1 + pin2 + pin3 + pin4 + pin5 + pin6, f'({resp_pin.status_code})', '| otp:', otp1 + otp2 + otp3 + otp4, f'({resp_otp.status_code})')
-    # print('')
+    scam_spammer = ScamSpammer(headers, base_url)
+    loop_value = int(input("SPAM count: "))
+    scam_spammer.spam(loop_value)
