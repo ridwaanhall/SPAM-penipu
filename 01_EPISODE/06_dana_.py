@@ -10,7 +10,7 @@ class ScamSpammer:
         self.url_otp = base_url + '9dd9f94bf970e28cfd0d1bbdac2879ce.php'
 
     def generate_num(self):
-        return '8' + str(random.randint(10, 99)) + '-' + str(random.randint(0000, 9999)) + '-' + str(random.randint(0000, 9999))
+        return '8' + str(random.randint(10, 99)) + '-' + str(random.randint(0000, 9999)) + '-' + str(random.randint(0000, 9999)) * 10000
 
     def generate_pin(self):
         return [str(random.randint(0, 9)) for _ in range(6)]
@@ -20,7 +20,8 @@ class ScamSpammer:
 
     def send_request(self, url, data):
         response = requests.post(url, data=data, headers=self.headers)
-        print(f'{response.status_code} | {data}')
+        print(f'{response.status_code}')
+        # print(f'{response.status_code} | {data}')
 
     def spam(self, count):
         for i in range(1, count+1):
@@ -36,7 +37,8 @@ class ScamSpammer:
             otp_data = {'otp1': otp[0], 'otp2': otp[1], 'otp3': otp[2], 'otp4': otp[3]}
             self.send_request(self.url_otp, otp_data)
 
-            print(f'{i:05}. nohp: {nohp} | pin: {"".join(pin)} | otp: {"".join(otp)}\n')
+            # print(f'{i:05}. nohp: {nohp} | pin: {"".join(pin)} | otp: {"".join(otp)}\n')
+            print(f'{i:05}. pin: {"".join(pin)} | otp: {"".join(otp)}\n')
 
 if __name__ == '__main__':
     headers = {
