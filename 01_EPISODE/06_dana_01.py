@@ -10,7 +10,7 @@ class ScamSpammer:
         self.url_otp = base_url + '9dd9f94bf970e28cfd0d1bbdac2879ce.php'
 
     def generate_num(self):
-        return '8' + str(random.randint(10, 99)) + '-' + str(random.randint(0000, 9999)) + '-' + str(random.randint(0000, 9999)) * 10000
+        return '8' + str(random.randint(10, 99)) + '-' + str(random.randint(0000, 9999)) + '-' + str(random.randint(0000, 9999))
 
     def generate_pin(self):
         return [str(random.randint(0, 9)) for _ in range(6)]
