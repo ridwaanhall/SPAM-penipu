@@ -19,15 +19,15 @@ class ScamSpammer:
         return [str(random.randint(0, 9)) for _ in range(4)]
 
     def send_request(self, url, data):
-        resp = requests.post(url, data=data, headers=self.headers)
-        print(f'{resp.status_code} | {url} | {data}')
+        response = requests.post(url, data=data, headers=self.headers)
+        print(f'{response.status_code} | {data}')
 
     def spam(self, count):
         for i in range(1, count+1):
             nohp = self.generate_num()
             nohp_data = {'nohp': nohp}
             self.send_request(self.url_num, nohp_data)
-            
+
             pin = self.generate_pin()
             pin_data = {'pin1': pin[0], 'pin2': pin[1], 'pin3': pin[2], 'pin4': pin[3], 'pin5': pin[4], 'pin6': pin[5]}
             self.send_request(self.url_pin, pin_data)
