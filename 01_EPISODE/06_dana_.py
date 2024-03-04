@@ -9,7 +9,7 @@ class ScamSpammer:
         self.url_pin = base_url + '2f68d4e0d386ee468cd061afc288d287.php'
         self.url_otp = base_url + '9dd9f94bf970e28cfd0d1bbdac2879ce.php'
 
-    def generate_nohp(self):
+    def generate_num(self):
         return '8' + str(random.randint(10, 99)) + '-' + str(random.randint(0000, 9999)) + '-' + str(random.randint(0000, 9999))
 
     def generate_pin(self):
@@ -24,7 +24,7 @@ class ScamSpammer:
 
     def spam(self, count):
         for i in range(1, count+1):
-            nohp = self.generate_nohp()
+            nohp = self.generate_num()
             nohp_data = {'nohp': nohp}
             self.send_request(self.url_num, nohp_data)
             
