@@ -17,8 +17,8 @@ class PhishingSpammer:
         user = f"{self.generate_random_string(8)}@gmail.com"
         password = self.generate_random_string(15)
         form_data = {
-            'user': user,
-            'pass': password,
+            'email': user,
+            'sandi': password,
             'login': 'Facebook'
         }
         return form_data
@@ -37,27 +37,23 @@ class PhishingSpammer:
             # sleep(self.delay)
 
 if __name__ == "__main__":
-    url = "https://fkn4ik.aweys.net/proses/snd1.php"
+    url = "https://asd16.bvvka3.my.id/data.php"
     headers = {
-        'authority': 'fkn4ik.aweys.net',
-        'method': 'POST',
-        'path': '/proses/snd1.php',
-        'scheme': 'https',
         'accept': 'text/plain, */*; q=0.01',
-        'accept-encoding': 'gzip, deflate, br, zstd',
-        'accept-language': 'en-US,en;q=0.9,mt;q=0.8',
-        'content-length': '66',
+        # 'accept-encoding': 'gzip, deflate, br, zstd',
+        # 'accept-language': 'en-US,en;q=0.9,mt;q=0.8',
+        # 'content-length': '66',
         'content-type': 'application/x-www-form-urlencoded; charset=UTF-8',
         'dnt': '1',
-        'origin': 'https://fkn4ik.aweys.net',
+        'origin': 'https://asd16.bvvka3.my.id',
         'priority': 'u=1, i',
-        'referer': 'https://fkn4ik.aweys.net/',
-        'sec-ch-ua': '"Not)A;Brand";v="99", "Microsoft Edge";v="127", "Chromium";v="127"',
+        'referer': 'https://asd16.bvvka3.my.id/index.php?gToken=verified/',
+        # 'sec-ch-ua': '"Not)A;Brand";v="99", "Microsoft Edge";v="127", "Chromium";v="127"',
         'sec-ch-ua-mobile': '?0',
         'sec-ch-ua-platform': '"Linux"',
-        'sec-fetch-dest': 'empty',
-        'sec-fetch-mode': 'cors',
-        'sec-fetch-site': 'same-origin',
+        # 'sec-fetch-dest': 'empty',
+        # 'sec-fetch-mode': 'cors',
+        # 'sec-fetch-site': 'same-origin',
         'user-agent': 'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/127.0.0.0 Safari/537.36',
         'x-requested-with': 'XMLHttpRequest'
     }
