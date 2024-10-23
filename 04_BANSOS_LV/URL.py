@@ -1,0 +1,1 @@
+url = "https://bansos2024.info/indonesia/"
